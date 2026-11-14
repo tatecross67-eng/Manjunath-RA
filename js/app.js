@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * Coordinates navigation across Dashboard, Transactions, Analytics, and Budget,
  * handles Add/Edit/Delete transaction modals with validation, and keeps UI synced
- * with the centralized storage module.
+ * with the REST API persistence layer.
  */
 
 import * as storage from './storage.js';
@@ -18,6 +18,7 @@ import {
 import { destroyDashboardCharts, renderDashboardView } from './dashboard.js';
 import { destroyAnalyticsCharts, renderAnalyticsView } from './analytics.js';
 import { renderBudgetView } from './budget.js';
+import { renderInsightsView } from './insights.js';
 
 const VIEW_META = {
   dashboard: {
@@ -35,6 +36,10 @@ const VIEW_META = {
   budget: {
     title: 'Budget Management',
     subtitle: 'Monthly spending limits and utilization alerts',
+  },
+  insights: {
+    title: 'Smart Money Insights',
+    subtitle: 'Automated spending patterns, trends, and budget forecasting',
   },
 };
 
@@ -59,7 +64,8 @@ const state = {
   focusSearch: false,
   pendingDeleteId: null,
   transactions: [],
-  budget: { monthlyLimit: 0, categoryLimits: {}, updatedAt: null },
+  budget: { monthlyLimit: 0, categoryLimits: {}, updatedAt: null, id: null },
+  backendError: null,
 };
 
 // DOM References
@@ -111,11 +117,17 @@ const els = {
 };
 
 /**
- * Loads fresh state from the centralized storage module.
+ * Loads fresh state from the REST API persistence layer.
  */
-function syncStateFromStorage() {
-  state.transactions = storage.getTransactions();
-  state.budget = storage.getBudget();
+async function syncStateFromStorage() {
+  try {
+    state.backendError = null;
+    state.transactions = await storage.getTransactions();
+    state.budget = await storage.getBudget(state.activeMonth);
+  } catch (err) {
+    console.error('Failed to sync state from backend:', err);
+    state.backendError = err.message || 'Unable to connect to the ClearLedger backend.';
+  }
 }
 
 /**
@@ -156,6 +168,21 @@ function setSidebarOpen(open) {
 }
 
 /**
+ * Renders a visual loading indicator inside the main content container.
+ */
+function renderLoadingState() {
+  if (!els.mainContent) return;
+  els.mainContent.innerHTML = `
+    <div class="empty-state" style="padding: 60px 20px;">
+      <div class="empty-icon"><i data-lucide="loader-2"></i></div>
+      <h3 class="empty-title">Loading financial records...</h3>
+      <p class="empty-desc">Fetching transactions and budget details from the backend.</p>
+    </div>
+  `;
+  refreshIcons();
+}
+
+/**
  * Navigates to a view and renders it.
  * @param {'dashboard'|'transactions'|'analytics'|'budget'} viewName
  */
@@ -190,11 +217,42 @@ function renderActiveView() {
   if (state.activeView !== 'dashboard') destroyDashboardCharts();
   if (state.activeView !== 'analytics') destroyAnalyticsCharts();
 
+  // If backend error occurred, render error banner
+  if (state.backendError) {
+    els.mainContent.innerHTML = `
+      <div class="notice-banner notice-danger" role="alert" style="margin-bottom: 24px;">
+        <div class="notice-banner-content">
+          <i data-lucide="alert-octagon"></i>
+          <span><strong>Backend Error:</strong> ${escapeHtml(
+            state.backendError
+          )}. Please verify the backend server is running on port 3000.</span>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" id="retryBackendBtn">Retry</button>
+      </div>
+      <div class="empty-state">
+        <div class="empty-icon"><i data-lucide="server-off"></i></div>
+        <h3 class="empty-title">Cannot connect to server</h3>
+        <p class="empty-desc">Make sure your Node.js server is started using <code>npm start</code>.</p>
+      </div>
+    `;
+    const retryBtn = els.mainContent.querySelector('#retryBackendBtn');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', async () => {
+        renderLoadingState();
+        await syncStateFromStorage();
+        renderActiveView();
+      });
+    }
+    refreshIcons();
+    return;
+  }
+
   const commonHandlers = {
     onNavigate: navigateTo,
     onOpenAddModal: () => openTransactionModal(),
     onEditTransaction: (id) => {
-      const txn = state.transactions.find((t) => t.id === id);
+      // Find transaction matching ID (supports string or number)
+      const txn = state.transactions.find((t) => String(t.id) === String(id));
       if (txn) openTransactionModal(txn);
     },
     onDeleteTransaction: (id) => openDeleteModal(id),
@@ -220,19 +278,29 @@ function renderActiveView() {
     });
   } else if (state.activeView === 'budget') {
     renderBudgetView(els.mainContent, state, {
-      onSaveMonthlyBudget: (limit) => {
-        storage.saveBudget({ monthlyLimit: limit });
-        syncStateFromStorage();
-        renderActiveView();
-        showToast('Monthly budget updated.');
+      onSaveMonthlyBudget: async (limit) => {
+        try {
+          await storage.saveBudget({ monthlyLimit: limit }, state.activeMonth);
+          await syncStateFromStorage();
+          renderActiveView();
+          showToast('Monthly budget updated.');
+        } catch (err) {
+          showToast(err.message || 'Failed to update budget', 'error');
+        }
       },
-      onSaveCategoryLimits: (categoryLimits) => {
-        storage.saveBudget({ categoryLimits });
-        syncStateFromStorage();
-        renderActiveView();
-        showToast('Category targets saved.');
+      onSaveCategoryLimits: async (categoryLimits) => {
+        try {
+          await storage.saveBudget({ categoryLimits }, state.activeMonth);
+          await syncStateFromStorage();
+          renderActiveView();
+          showToast('Category targets saved.');
+        } catch (err) {
+          showToast(err.message || 'Failed to save category targets', 'error');
+        }
       },
     });
+  } else if (state.activeView === 'insights') {
+    renderInsightsView(els.mainContent, state, commonHandlers);
   }
 
   refreshIcons();
@@ -322,10 +390,10 @@ function closeTransactionModal() {
 
 /**
  * Opens the Delete confirmation modal for a given transaction ID.
- * @param {string} id
+ * @param {string|number} id
  */
 function openDeleteModal(id) {
-  const txn = state.transactions.find((t) => t.id === id);
+  const txn = state.transactions.find((t) => String(t.id) === String(id));
   if (!txn) return;
   state.pendingDeleteId = id;
   els.deleteConfirmText.textContent = `Are you sure you want to delete "${txn.title}"? This action cannot be undone.`;
@@ -341,7 +409,7 @@ function closeDeleteModal() {
 /**
  * Handles form submission for adding or updating a transaction.
  */
-function handleTransactionSubmit(e) {
+async function handleTransactionSubmit(e) {
   e.preventDefault();
   clearFormErrors();
 
@@ -381,37 +449,52 @@ function handleTransactionSubmit(e) {
   }
 
   const editingId = els.txnId.value;
-  if (editingId) {
-    storage.updateTransaction(editingId, normalized);
-    showToast('Transaction updated.');
-  } else {
-    storage.addTransaction(normalized);
-    showToast(`${normalized.type === 'income' ? 'Income' : 'Expense'} added.`);
-  }
+  try {
+    if (editingId) {
+      await storage.updateTransaction(editingId, normalized);
+      showToast('Transaction updated.');
+    } else {
+      await storage.addTransaction(normalized);
+      showToast(`${normalized.type === 'income' ? 'Income' : 'Expense'} added.`);
+    }
 
-  // Keep activeMonth aligned if user logs an entry in a new month
-  state.activeMonth = normalized.date.slice(0, 7);
-  if (els.globalMonthSelect) {
-    els.globalMonthSelect.value = state.activeMonth;
-  }
+    // Keep activeMonth aligned if user logs an entry in a new month
+    state.activeMonth = normalized.date.slice(0, 7);
+    if (els.globalMonthSelect) {
+      els.globalMonthSelect.value = state.activeMonth;
+    }
 
-  closeTransactionModal();
-  syncStateFromStorage();
-  renderActiveView();
+    closeTransactionModal();
+    await syncStateFromStorage();
+    renderActiveView();
+  } catch (err) {
+    showToast(err.message || 'Failed to save transaction', 'error');
+  }
 }
 
 /**
  * Binds global DOM listeners and initializes the application.
  */
-function initApp() {
-  storage.seedInitialDataIfEmpty();
-  syncStateFromStorage();
+async function initApp() {
+  renderLoadingState();
+
+  try {
+    const migration = await storage.migrateFromLocalStorageIfPresent();
+    if (!migration.alreadyMigrated && (migration.importedTransactionsCount > 0 || migration.importedBudgetsCount > 0)) {
+      showToast(`Migrated ${migration.importedTransactionsCount} records to database.`);
+    }
+    await storage.seedInitialDataIfEmpty(state.activeMonth);
+    await syncStateFromStorage();
+  } catch (err) {
+    state.backendError = err.message || 'Cannot connect to backend server.';
+  }
 
   if (els.globalMonthSelect) {
     els.globalMonthSelect.value = state.activeMonth;
-    els.globalMonthSelect.addEventListener('change', (e) => {
+    els.globalMonthSelect.addEventListener('change', async (e) => {
       if (e.target.value) {
         state.activeMonth = e.target.value;
+        await syncStateFromStorage();
         renderActiveView();
       }
     });
@@ -442,13 +525,19 @@ function initApp() {
     showToast('Exported transactions to CSV.');
   });
 
-  els.resetSampleBtn?.addEventListener('click', () => {
-    storage.resetToSampleData();
-    syncStateFromStorage();
-    state.activeMonth = getTodayIsoDate().slice(0, 7);
-    if (els.globalMonthSelect) els.globalMonthSelect.value = state.activeMonth;
-    renderActiveView();
-    showToast('Demo data restored.');
+  els.resetSampleBtn?.addEventListener('click', async () => {
+    renderLoadingState();
+    try {
+      await storage.resetToSampleData(state.activeMonth);
+      await syncStateFromStorage();
+      state.activeMonth = getTodayIsoDate().slice(0, 7);
+      if (els.globalMonthSelect) els.globalMonthSelect.value = state.activeMonth;
+      renderActiveView();
+      showToast('Demo data restored.');
+    } catch (err) {
+      showToast(err.message || 'Failed to reset demo data', 'error');
+      renderActiveView();
+    }
   });
 
   // Add/Edit Modal listeners
@@ -469,13 +558,17 @@ function initApp() {
   els.deleteModal?.addEventListener('click', (e) => {
     if (e.target === els.deleteModal) closeDeleteModal();
   });
-  els.confirmDeleteBtn?.addEventListener('click', () => {
+  els.confirmDeleteBtn?.addEventListener('click', async () => {
     if (state.pendingDeleteId) {
-      storage.deleteTransaction(state.pendingDeleteId);
-      closeDeleteModal();
-      syncStateFromStorage();
-      renderActiveView();
-      showToast('Transaction deleted.');
+      try {
+        await storage.deleteTransaction(state.pendingDeleteId);
+        closeDeleteModal();
+        await syncStateFromStorage();
+        renderActiveView();
+        showToast('Transaction deleted.');
+      } catch (err) {
+        showToast(err.message || 'Failed to delete transaction', 'error');
+      }
     }
   });
 

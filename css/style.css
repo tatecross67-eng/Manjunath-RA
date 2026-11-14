@@ -1305,6 +1305,215 @@ a {
   }
 }
 
+/* ==========================================================================
+   Smart Money Insights Styles
+   ========================================================================== */
+
+.prediction-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.prediction-stat-box {
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prediction-stat-val {
+  font-family: var(--font-mono);
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.prediction-disclaimer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.prediction-disclaimer svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.comparison-overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 12px;
+}
+
+.comparison-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+}
+
+.comparison-change-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comparison-change-row svg {
+  width: 24px;
+  height: 24px;
+}
+
+.comparison-pct {
+  font-family: var(--font-mono);
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.comparison-amt {
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.category-comparison-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.category-comparison-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-subtle);
+}
+
+.comparison-values {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.suggestions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.insight-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.insight-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.insight-positive {
+  border-left: 4px solid var(--state-success);
+}
+
+.insight-warning {
+  border-left: 4px solid var(--state-warning);
+}
+
+.insight-danger {
+  border-left: 4px solid var(--state-danger);
+}
+
+.insight-info {
+  border-left: 4px solid var(--accent-primary);
+}
+
+.insight-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.insight-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.insight-positive .insight-icon {
+  background-color: var(--state-success-bg);
+  color: var(--state-success);
+}
+
+.insight-warning .insight-icon {
+  background-color: var(--state-warning-bg);
+  color: var(--state-warning);
+}
+
+.insight-danger .insight-icon {
+  background-color: var(--state-danger-bg);
+  color: var(--state-danger);
+}
+
+.insight-info .insight-icon {
+  background-color: var(--accent-primary-soft);
+  color: var(--accent-primary);
+}
+
+.insight-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.insight-title {
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.insight-text {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+  .prediction-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .comparison-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .suggestions-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
